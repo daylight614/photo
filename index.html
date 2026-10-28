@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>해솔네컷 부스</title>
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#fff7ef;--ink:#2b2236;--card:#ffffff;--accent:#ff7a00;--muted:#7a7088;}
+  body.theme-halloween{--bg:#1b1226;--ink:#f5eee6;--card:#2a1d3a;--accent:#ff7a00;--muted:#c2b4d6;}
+  body.theme-graduation{--bg:#eef2fb;--ink:#13234a;--card:#ffffff;--accent:#1f3c88;--muted:#5d6b8c;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;transition:background .3s}
+  .screen{display:none;min-height:100vh;padding:24px 16px;flex-direction:column;align-items:center;justify-content:center;gap:20px}
+  .screen.active{display:flex}
+  h1{font-family:'Jua',sans-serif;font-size:clamp(40px,7vw,72px);margin:0;font-weight:400}
+  h2{font-family:'Jua',sans-serif;font-size:32px;margin:0;font-weight:400}
+  .lead{font-size:20px;color:var(--muted);margin:0}
+  .frames{display:flex;gap:28px;flex-wrap:wrap;justify-content:center}
+  .frame-card{border:none;background:var(--card);border-radius:24px;padding:18px 18px 14px;box-shadow:0 8px 24px rgba(0,0,0,.1);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:12px;transition:transform .15s}
+  .frame-card:hover,.frame-card:focus-visible{transform:translateY(-4px)}
+  .frame-card canvas{height:min(58vh,480px);width:auto;border-radius:4px;display:block;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  .frame-card span{font-family:'Jua',sans-serif;font-size:28px;color:#2b2236}
+  .shoot-layout{display:flex;gap:28px;align-items:center;justify-content:center;flex-wrap:wrap}
+  .cam-wrap{position:relative;height:min(72vh,700px);max-width:92vw;aspect-ratio:9/10;border-radius:20px;overflow:hidden;background:#111}
+  video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}
+  #countdown{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Jua',sans-serif;font-size:clamp(100px,18vw,180px);color:#fff;text-shadow:0 4px 20px rgba(0,0,0,.5);pointer-events:none}
+  #flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .45s}
+  #flash.on{opacity:1;transition:none}
+  #shot-counter{position:absolute;top:14px;left:14px;background:rgba(0,0,0,.55);color:#fff;padding:6px 14px;border-radius:999px;font-weight:700}
+  #cam-error{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;color:#fff;font-size:18px;line-height:1.6}
+  .side{display:flex;flex-direction:column;align-items:center;gap:16px}
+  #live{height:min(44vh,400px);width:auto;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,.2);display:block}
+  .actions{display:flex;flex-direction:column;gap:10px;align-items:center}
+  .btn{font-family:'Jua',sans-serif;font-size:22px;padding:14px 28px;border-radius:14px;border:2px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.ghost{border-color:transparent;font-size:18px;text-decoration:underline;padding:8px 12px}
+  .btn:disabled{opacity:.45;cursor:default}
+  .result-layout{display:flex;gap:32px;align-items:center;flex-wrap:wrap;justify-content:center}
+  #result{height:min(84vh,820px);width:auto;max-width:90vw;border-radius:4px;box-shadow:0 10px 30px rgba(0,0,0,.25);display:block}
+  .panel{background:var(--card);border-radius:20px;padding:24px;width:min(92vw,380px);display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.1)}
+  .panel label{font-weight:700;font-size:15px;display:flex;flex-direction:column;gap:6px}
+  .panel input[type=email]{width:100%;font-size:18px;padding:12px;border:2px solid #ccc;border-radius:10px;background:#fff;color:#222}
+  .panel label.check{flex-direction:row;font-weight:400;font-size:14px;color:var(--muted);align-items:flex-start;gap:8px;line-height:1.5}
+  .check input{width:20px;height:20px;margin-top:2px;flex-shrink:0}
+  #msg{min-height:1.5em;margin:0;font-weight:700;line-height:1.5}
+  #msg.ok{color:#22a35a} #msg.err{color:#e04848}
+  #autoreset{margin:0;font-size:14px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<!-- 1. 프레임 선택 -->
+<section id="screen-select" class="screen active">
+  <h1>해솔네컷 📸</h1>
+  <p class="lead">마음에 드는 프레임을 골라 주세요</p>
+  <div class="frames" id="frames"></div>
+</section>
+
+<!-- 2. 촬영 -->
+<section id="screen-shoot" class="screen">
+  <div class="shoot-layout">
+    <div class="cam-wrap" id="cam-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <div id="countdown"></div>
+      <div id="flash"></div>
+      <div id="shot-counter">준비!</div>
+      <div id="cam-error"></div>
+    </div>
+    <div class="side">
+      <canvas id="live"></canvas>
+      <div class="actions">
+        <button id="btn-start" class="btn primary">촬영 시작 (4컷)</button>
+        <button id="btn-back" class="btn ghost">프레임 다시 고르기</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. 결과 + 메일 -->
+<section id="screen-result" class="screen">
+  <div class="result-layout">
+    <canvas id="result"></canvas>
+    <div class="panel">
+      <h2>완성! 🎉</h2>
+      <label>이메일 주소<input type="email" id="email1" autocomplete="off" placeholder="example@email.com"></label>
+      <label>이메일 주소 확인<input type="email" id="email2" autocomplete="off" placeholder="한 번 더 입력해 주세요"></label>
+      <label class="check"><input type="checkbox" id="agree"> 사진은 어디에도 저장되지 않고, 입력한 이메일로만 발송된 뒤 삭제된다는 안내를 확인했어요.</label>
+      <button id="btn-send" class="btn primary">메일로 받기</button>
+      <button id="btn-download" class="btn">이 기기에 저장</button>
+      <p id="msg"></p>
+      <p id="autoreset"></p>
+      <button id="btn-retake" class="btn ghost">다시 찍기</button>
+      <button id="btn-next" class="btn ghost">다음 사람 (처음으로)</button>
+    </div>
+  </div>
+</section>
+
+<script>
+/* ===== 선생님이 바꿀 부분 ===== */
+const CONFIG = {
+  SCRIPT_URL: '',            // Apps Script 웹앱 URL (https://script.google.com/macros/s/.../exec)
+  BOOTH_KEY: '3333',         // Code.gs의 BOOTH_KEY와 똑같이
+  FRAMES: {
+    // 프레임 이미지: 가로 1200 × 세로 1776 픽셀(10×14.8cm, 약 300dpi) PNG 권장
+    // 사진이 들어갈 4칸을 '투명'하게 뚫어 두면 그 위치를 자동으로 찾아요.
+    // label: 선택 화면 이름 / name: 메일 제목 / theme: 화면 색 (halloween 또는 graduation)
+    'halloween-spooky': { src: 'frames/halloween-spooky.png', label: '🦇 으스스 할로윈', name: '할로윈 해솔네컷', theme: 'halloween',  fallbackBg: '#1b1226', fallbackText: '#ff8c1a' },
+    'halloween-cute':   { src: 'frames/halloween-cute.png',   label: '🎃 귀여운 할로윈', name: '할로윈 해솔네컷', theme: 'halloween',  fallbackBg: '#1b1226', fallbackText: '#ff8c1a' },
+    'graduation':       { src: 'frames/graduation.png',       label: '🌸 졸업',         name: '졸업 해솔네컷',   theme: 'graduation', fallbackBg: '#13234a', fallbackText: '#f2c14e' }
+  },
+  // 투명 칸이 없는 프레임(JPG 등)일 때만 사용: 사진 4칸 위치를 직접 지정 (단위: 픽셀, 1200×1776 기준)
+  // 예) SLOTS: [{x:60,y:60,w:525,h:700}, {x:615,y:60,w:525,h:700}, {x:60,y:790,w:525,h:700}, {x:615,y:790,w:525,h:700}]
+  SLOTS: null,
+  COUNTDOWN: 3,              // 컷마다 카운트다운(초)
+  SHOW_DOWNLOAD: true,       // '이 기기에 저장' 버튼 표시 여부
+  AUTO_RESET_SEC: 20         // 발송 성공 후 처음 화면으로 돌아가는 시간(초)
+};
+/* ============================== */
+
+// 결과물 크기: 가로 10cm × 세로 14.8cm @ 약 305dpi
+const OUT_W = 1200, OUT_H = 1776;
+// 기본 2x2 배치 (프레임에서 칸을 못 찾을 때 사용)
+const DEFAULT_SLOTS = (() => {
+  const m = 60, g = 30, w = (OUT_W - m*2 - g) / 2, h = 700;
+  return [{x:m,y:m,w,h},{x:m+w+g,y:m,w,h},{x:m,y:m+h+g,w,h},{x:m+w+g,y:m+h+g,w,h}];
+})();
+
+const $ = id => document.getElementById(id);
+const frames = {}; // key -> { img, slots, overlay }
+let theme = null, stream = null, shots = [], busy = false, resultData = null, resetTimer = null;
+const wait = ms => new Promise(r => setTimeout(r, ms));
+function show(id){ document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id)); }
+
+/* ----- 프레임 불러오기 + 투명 칸 자동 찾기 ----- */
+function loadImage(src){
+  return new Promise(res => { const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null); img.src = src; });
+}
+function detectSlots(img){
+  const S = 4, w = OUT_W / S, h = OUT_H / S;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+  let data;
+  try { data = ctx.getImageData(0, 0, w, h).data; } catch (e) { return null; } // file://로 열면 실패
+  const mask = new Uint8Array(w*h);
+  for (let i=0;i<w*h;i++) mask[i] = data[i*4+3] < 128 ? 1 : 0;
+  const seen = new Uint8Array(w*h), boxes = [];
+  for (let start=0; start<w*h; start++){
+    if (!mask[start] || seen[start]) continue;
+    let minX=w, minY=h, maxX=0, maxY=0, area=0; const stack=[start]; seen[start]=1;
+    while (stack.length){
+      const p = stack.pop(), x = p % w, y = (p / w) | 0; area++;
+      if (x<minX) minX=x; if (x>maxX) maxX=x; if (y<minY) minY=y; if (y>maxY) maxY=y;
+      for (const q of [p-1,p+1,p-w,p+w]){
+        if (q<0 || q>=w*h || seen[q] || !mask[q]) continue;
+        if ((q===p-1 && x===0) || (q===p+1 && x===w-1)) continue;
+        seen[q]=1; stack.push(q);
+      }
+    }
+    if (area >= w*h*0.02) boxes.push({x:minX, y:minY, w:maxX-minX+1, h:maxY-minY+1, area});
+  }
+  if (boxes.length < 4) return null;
+  boxes.sort((a,b) => b.area - a.area);
+  const top4 = boxes.slice(0,4).sort((a,b) => (a.y+a.h/2) - (b.y+b.h/2));
+  const rows = [top4.slice(0,2).sort((a,b)=>a.x-b.x), top4.slice(2).sort((a,b)=>a.x-b.x)];
+  // 경계가 비지 않도록 한 칸(4px)씩 넓혀서 사용 (사진은 프레임 밑에 깔림)
+  return rows.flat().map(b => ({ x:(b.x-1)*S, y:(b.y-1)*S, w:(b.w+2)*S, h:(b.h+2)*S }));
+}
+async function prepareFrame(key){
+  const cfg = CONFIG.FRAMES[key];
+  const img = await loadImage(cfg.src);
+  let slots = null, overlay = false;
+  if (img) { slots = detectSlots(img); overlay = !!slots; }
+  if (!slots) slots = CONFIG.SLOTS || DEFAULT_SLOTS;
+  frames[key] = { img, slots, overlay };
+}
+
+/* ----- 합성 ----- */
+function drawCover(ctx, src, x, y, w, h){
+  const sw0 = src.width, sh0 = src.height, r = w / h;
+  let sw = sw0, sh = sw0 / r; if (sh > sh0) { sh = sh0; sw = sh0 * r; }
+  ctx.drawImage(src, (sw0-sw)/2, (sh0-sh)/2, sw, sh, x, y, w, h);
+}
+function drawStrip(canvas, key, photos, scale){
+  const f = frames[key], cfg = CONFIG.FRAMES[key];
+  canvas.width = Math.round(OUT_W*scale); canvas.height = Math.round(OUT_H*scale);
+  const ctx = canvas.getContext('2d'); ctx.setTransform(scale,0,0,scale,0,0);
+  ctx.imageSmoothingQuality = 'high';
+
+  // 1) 바탕
+  if (f.img && !f.overlay) ctx.drawImage(f.img, 0, 0, OUT_W, OUT_H);           // 투명 칸 없는 프레임 → 바탕으로
+  else { ctx.fillStyle = f.img ? '#ffffff' : cfg.fallbackBg; ctx.fillRect(0,0,OUT_W,OUT_H); }
+
+  // 2) 사진 4칸
+  f.slots.forEach((s, i) => {
+    if (photos[i]) drawCover(ctx, photos[i], s.x, s.y, s.w, s.h);
+    else {
+      ctx.fillStyle = 'rgba(128,128,128,.35)'; ctx.fillRect(s.x, s.y, s.w, s.h);
+      ctx.font = "120px Jua, sans-serif"; ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(i+1), s.x + s.w/2, s.y + s.h/2);
+    }
+  });
+
+  // 3) 프레임 덮기
+  if (f.img && f.overlay) ctx.drawImage(f.img, 0, 0, OUT_W, OUT_H);
+  if (!f.img) { // 프레임 이미지가 아직 없을 때 임시 문구
+    ctx.font = "72px Jua, sans-serif"; ctx.fillStyle = cfg.fallbackText; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const bottom = Math.max(...f.slots.map(s => s.y + s.h));
+    ctx.fillText(cfg.name, OUT_W/2, (bottom + OUT_H)/2);
+  }
+}
+
+/* ----- 카메라 ----- */
+async function startCamera(){
+  $('cam-error').style.display = 'none';
+  if (stream) return true;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video:{ width:{ideal:1920}, height:{ideal:1080}, facingMode:'user' }, audio:false });
+    $('video').srcObject = stream;
+    return true;
+  } catch (e) {
+    const el = $('cam-error'); el.style.display = 'flex';
+    el.textContent = '카메라를 켤 수 없어요. 브라우저에서 카메라 권한을 허용했는지, https 주소로 열었는지 확인해 주세요.';
+    return false;
+  }
+}
+function capture(slot){
+  const v = $('video'), vw = v.videoWidth, vh = v.videoHeight, r = slot.w / slot.h;
+  let sw = vw, sh = vw / r; if (sh > vh) { sh = vh; sw = vh * r; }
+  const c = document.createElement('canvas'); c.width = Math.round(slot.w); c.height = Math.round(slot.h);
+  const ctx = c.getContext('2d'); ctx.translate(c.width,0); ctx.scale(-1,1); // 거울 모드
+  ctx.drawImage(v,(vw-sw)/2,(vh-sh)/2,sw,sh,0,0,c.width,c.height);
+  return c;
+}
+function renderLive(){ drawStrip($('live'), theme, shots, 0.25); }
+async function runShoot(){
+  if (busy) return;
+  const v = $('video');
+  if (!stream || !v.videoWidth) { if (!(await startCamera())) return; await wait(600); }
+  busy = true; shots = []; renderLive();
+  $('btn-start').disabled = true; $('btn-back').disabled = true;
+  const slots = frames[theme].slots;
+  for (let i=0;i<4;i++){
+    $('cam-wrap').style.aspectRatio = `${slots[i].w} / ${slots[i].h}`;
+    $('shot-counter').textContent = `${i+1} / 4`;
+    for (let n=CONFIG.COUNTDOWN;n>0;n--){ $('countdown').textContent = n; await wait(1000); }
+    $('countdown').textContent = '';
+    const fl = $('flash'); fl.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => fl.classList.remove('on')));
+    shots.push(capture(slots[i])); renderLive();
+    await wait(900);
+  }
+  busy = false; $('btn-start').disabled = false; $('btn-back').disabled = false;
+  $('shot-counter').textContent = '준비!';
+  showResult();
+}
+
+/* ----- 결과 / 발송 ----- */
+function setMsg(m,cls){ const el = $('msg'); el.textContent = m; el.className = cls || ''; }
+function resetForm(){
+  $('email1').value = ''; $('email2').value = ''; $('agree').checked = false;
+  $('btn-send').disabled = false; setMsg(''); $('autoreset').textContent = '';
+  clearInterval(resetTimer); resetTimer = null;
+}
+function showResult(){
+  drawStrip($('result'), theme, shots, 1);
+  resultData = $('result').toDataURL('image/jpeg', 0.92);
+  resetForm(); show('screen-result');
+}
+function clearAll(){
+  shots = []; resultData = null;
+  const r = $('result'); r.width = 0; r.height = 0;
+  if (theme) renderLive();
+  resetForm();
+}
+function goHome(){ clearAll(); theme = null; document.body.className = ''; show('screen-select'); }
+function startAutoReset(){
+  let left = CONFIG.AUTO_RESET_SEC;
+  $('autoreset').textContent = `${left}초 뒤 처음 화면으로 돌아가요.`;
+  resetTimer = setInterval(() => {
+    left--; $('autoreset').textContent = `${left}초 뒤 처음 화면으로 돌아가요.`;
+    if (left <= 0) goHome();
+  }, 1000);
+}
+async function sendMail(){
+  const e1 = $('email1').value.trim(), e2 = $('email2').value.trim();
+  if (!CONFIG.SCRIPT_URL) return setMsg('메일 발송이 아직 설정되지 않았어요. (선생님: SCRIPT_URL을 넣어 주세요)','err');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e1)) return setMsg('이메일 주소를 확인해 주세요.','err');
+  if (e1 !== e2) return setMsg('두 이메일 주소가 서로 달라요.','err');
+  if (!$('agree').checked) return setMsg('안내 확인란에 체크해 주세요.','err');
+  if (!resultData) return setMsg('사진이 없어요. 다시 찍어 주세요.','err');
+  $('btn-send').disabled = true; setMsg('보내는 중이에요…');
+  try {
+    const res = await fetch(CONFIG.SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ key: CONFIG.BOOTH_KEY, email: e1, frame: theme, title: CONFIG.FRAMES[theme].name, image: resultData.split(',')[1] })
+    });
+    const out = await res.json();
+    if (out.ok) { setMsg('메일을 보냈어요! 몇 분 안에 도착해요. (스팸함도 확인해 주세요)','ok'); startAutoReset(); }
+    else { setMsg(out.error || '발송에 실패했어요.','err'); $('btn-send').disabled = false; }
+  } catch (err) {
+    setMsg('서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.','err'); $('btn-send').disabled = false;
+  }
+}
+function download(){
+  if (!resultData) return;
+  const a = document.createElement('a'); a.href = resultData; a.download = `해솔네컷_${Date.now()}.jpg`;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* ----- 이벤트 ----- */
+function buildFrameCards(){
+  const wrap = $('frames'); wrap.innerHTML = '';
+  for (const key of Object.keys(CONFIG.FRAMES)){
+    const btn = document.createElement('button'); btn.className = 'frame-card'; btn.dataset.frame = key;
+    const cv = document.createElement('canvas'); const label = document.createElement('span'); label.textContent = CONFIG.FRAMES[key].label;
+    btn.append(cv, label); wrap.appendChild(btn);
+    drawStrip(cv, key, [], 0.3);
+    btn.addEventListener('click', () => selectFrame(key));
+  }
+}
+async function selectFrame(key){
+  theme = key; document.body.className = 'theme-' + CONFIG.FRAMES[key].theme;
+  const s = frames[theme].slots[0]; $('cam-wrap').style.aspectRatio = `${s.w} / ${s.h}`;
+  shots = []; renderLive(); show('screen-shoot'); await startCamera();
+}
+$('btn-start').addEventListener('click', runShoot);
+$('btn-back').addEventListener('click', goHome);
+$('btn-send').addEventListener('click', sendMail);
+$('btn-download').addEventListener('click', download);
+$('btn-retake').addEventListener('click', () => { clearAll(); show('screen-shoot'); });
+$('btn-next').addEventListener('click', goHome);
+if (!CONFIG.SHOW_DOWNLOAD) $('btn-download').style.display = 'none';
+
+(async () => {
+  try { await document.fonts.load('40px Jua'); } catch (e) {}
+  await Promise.all(Object.keys(CONFIG.FRAMES).map(prepareFrame));
+  buildFrameCards();
+})();
+</script>
+</body>
+</html>
